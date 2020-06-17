@@ -1,5 +1,5 @@
 ## null [![GoDoc](https://godoc.org/github.com/guregu/null?status.svg)](https://godoc.org/github.com/guregu/null) [![CircleCI](https://circleci.com/gh/guregu/null.svg?style=svg)](https://circleci.com/gh/guregu/null)
-`import "gopkg.in/guregu/null.v4"`
+`import "github.com/cnjack/null"`
 
 null is a library with reasonable options for dealing with nullable SQL and JSON values
 
@@ -14,7 +14,7 @@ All types also implement: `encoding.TextMarshaler`, `encoding.TextUnmarshaler`, 
 
 ### null package
 
-`import "gopkg.in/guregu/null.v4"`
+`import "github.com/cnjack/null"`
 
 #### null.String
 Nullable string.
@@ -42,7 +42,7 @@ Marshals to JSON null if SQL source data is null. Zero input will not produce a 
 
 ### zero package
 
-`import "gopkg.in/guregu/null.v4/zero"`
+`import "github.com/cnjack/null/zero"`
 
 #### zero.String
 Nullable string.
