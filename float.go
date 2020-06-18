@@ -9,6 +9,10 @@ import (
 	"math"
 	"reflect"
 	"strconv"
+
+	"go.mongodb.org/mongo-driver/bson/bsoncodec"
+	"go.mongodb.org/mongo-driver/bson/bsonrw"
+	"go.mongodb.org/mongo-driver/bson/bsontype"
 )
 
 // Float is a nullable float64.
@@ -153,4 +157,65 @@ func (f Float) IsZero() bool {
 // has changed in comparison to some previous value.
 func (f Float) Equal(other Float) bool {
 	return f.Valid == other.Valid && (!f.Valid || f.Float64 == other.Float64)
+}
+
+// DecodeValue implements bsoncodec.ValueDecoder
+func (f Float) DecodeValue(dc bsoncodec.DecodeContext, vr bsonrw.ValueReader, val reflect.Value) error {
+	if !val.CanSet() || val.Type() != tFloat {
+		return bsoncodec.ValueDecoderError{Name: "NullFloatDecodeValue", Types: []reflect.Type{tFloat}, Received: val}
+	}
+
+	var ff float64
+	var err error
+	switch vrType := vr.Type(); vrType {
+	case bsontype.Int32:
+		i32, err := vr.ReadInt32()
+		if err != nil {
+			return err
+		}
+		ff = float64(i32)
+	case bsontype.Int64:
+		i64, err := vr.ReadInt64()
+		if err != nil {
+			return err
+		}
+		ff = float64(i64)
+	case bsontype.Double:
+		ff, err = vr.ReadDouble()
+		if err != nil {
+			return err
+		}
+	case bsontype.Boolean:
+		b, err := vr.ReadBoolean()
+		if err != nil {
+			return err
+		}
+		if b {
+			ff = 1
+		}
+	case bsontype.Null:
+		if err := vr.ReadNull(); err != nil {
+			return err
+		}
+		val.Set(reflect.ValueOf(NewFloat(0, false)))
+
+		return nil
+	default:
+		return fmt.Errorf("cannot decode %v into a null.Float", vrType)
+	}
+
+	val.Set(reflect.ValueOf(FloatFrom(ff)))
+	return nil
+}
+
+// EncodeValue implements bsoncodec.ValueEncoder
+func (f Float) EncodeValue(ec bsoncodec.EncodeContext, vw bsonrw.ValueWriter, val reflect.Value) error {
+	if !val.IsValid() || val.Type() != tFloat {
+		return bsoncodec.ValueEncoderError{Name: "NullFloatEncodeValue", Types: []reflect.Type{tFloat}, Received: val}
+	}
+	ff := val.Interface().(Float)
+	if !ff.Valid {
+		return vw.WriteNull()
+	}
+	return vw.WriteDouble(ff.Float64)
 }

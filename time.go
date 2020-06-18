@@ -6,8 +6,16 @@ import (
 	"database/sql/driver"
 	"encoding/json"
 	"fmt"
+	"log"
+	"reflect"
 	"time"
+
+	"go.mongodb.org/mongo-driver/bson/bsoncodec"
+	"go.mongodb.org/mongo-driver/bson/bsonrw"
+	"go.mongodb.org/mongo-driver/bson/bsontype"
 )
+
+const timeFormatString = "2006-01-02T15:04:05.999Z07:00"
 
 // Time is a nullable time.Time. It supports SQL and JSON serialization.
 // It will marshal to null if null.
@@ -137,4 +145,67 @@ func (t Time) Equal(other Time) bool {
 // have a different monotonic clock reading.
 func (t Time) ExactEqual(other Time) bool {
 	return t.Valid == other.Valid && (!t.Valid || t.Time == other.Time)
+}
+
+// DecodeValue implements bsoncodec.ValueDecoder
+func (t Time) DecodeValue(dc bsoncodec.DecodeContext, vr bsonrw.ValueReader, val reflect.Value) error {
+	if !val.CanSet() || val.Type() != tTime {
+		return bsoncodec.ValueDecoderError{Name: "NullBoolDecodeValue", Types: []reflect.Type{tTime}, Received: val}
+	}
+
+	var timeVal time.Time
+	switch vrType := vr.Type(); vrType {
+	case bsontype.DateTime:
+		dt, err := vr.ReadDateTime()
+		if err != nil {
+			return err
+		}
+		timeVal = time.Unix(dt/1000, dt%1000*1000000)
+	case bsontype.String:
+		// assume strings are in the isoTimeFormat
+		timeStr, err := vr.ReadString()
+		if err != nil {
+			return err
+		}
+		timeVal, err = time.Parse(timeFormatString, timeStr)
+		if err != nil {
+			return err
+		}
+	case bsontype.Int64:
+		i64, err := vr.ReadInt64()
+		if err != nil {
+			return err
+		}
+		timeVal = time.Unix(i64/1000, i64%1000*1000000)
+	case bsontype.Timestamp:
+		t, _, err := vr.ReadTimestamp()
+		if err != nil {
+			return err
+		}
+		timeVal = time.Unix(int64(t), 0)
+	case bsontype.Null:
+		if err := vr.ReadNull(); err != nil {
+			return err
+		}
+		val.Set(reflect.ValueOf(NewTime(time.Time{}, false)))
+		return nil
+	default:
+		return fmt.Errorf("cannot decode %v into a null.Time", vrType)
+	}
+
+	val.Set(reflect.ValueOf(TimeFrom(timeVal)))
+	return nil
+}
+
+// EncodeValue implements bsoncodec.ValueEncoder
+func (t Time) EncodeValue(ec bsoncodec.EncodeContext, vw bsonrw.ValueWriter, val reflect.Value) error {
+	if !val.IsValid() || val.Type() != tTime {
+		return bsoncodec.ValueEncoderError{Name: "NullTimeEncodeValue", Types: []reflect.Type{tTime}, Received: val}
+	}
+	tt := val.Interface().(Time)
+	if !tt.Valid {
+		return vw.WriteNull()
+	}
+	log.Println(tt.Time.Unix()*1000 + int64(tt.Time.Nanosecond()/1e6))
+	return vw.WriteDateTime(tt.Time.Unix()*1000 + int64(tt.Time.Nanosecond()/1e6))
 }

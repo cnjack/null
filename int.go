@@ -6,7 +6,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
+	"reflect"
 	"strconv"
+
+	"go.mongodb.org/mongo-driver/bson/bsoncodec"
+	"go.mongodb.org/mongo-driver/bson/bsonrw"
+	"go.mongodb.org/mongo-driver/bson/bsontype"
 )
 
 // Int is an nullable int64.
@@ -141,4 +147,72 @@ func (i Int) IsZero() bool {
 // Equal returns true if both ints have the same value or are both null.
 func (i Int) Equal(other Int) bool {
 	return i.Valid == other.Valid && (!i.Valid || i.Int64 == other.Int64)
+}
+
+// DecodeValue implements bsoncodec.ValueDecoder
+func (i Int) DecodeValue(dc bsoncodec.DecodeContext, vr bsonrw.ValueReader, val reflect.Value) error {
+	if !val.CanSet() || val.Type() != tInt {
+		return bsoncodec.ValueDecoderError{Name: "NullIntDecodeValue", Types: []reflect.Type{tInt}, Received: val}
+	}
+
+	var i64 int64
+	var err error
+	switch vrType := vr.Type(); vrType {
+	case bsontype.Int32:
+		i32, err := vr.ReadInt32()
+		if err != nil {
+			return err
+		}
+		i64 = int64(i32)
+	case bsontype.Int64:
+		i64, err = vr.ReadInt64()
+		if err != nil {
+			return err
+		}
+	case bsontype.Double:
+		f64, err := vr.ReadDouble()
+		if err != nil {
+			return err
+		}
+		if !dc.Truncate && math.Floor(f64) != f64 {
+			return errors.New("IntDecodeValue can only truncate float64 to an integer type when truncation is enabled")
+		}
+		if f64 > float64(math.MaxInt64) {
+			return fmt.Errorf("%g overflows int64", f64)
+		}
+		i64 = int64(f64)
+	case bsontype.Boolean:
+		b, err := vr.ReadBoolean()
+		if err != nil {
+			return err
+		}
+		if b {
+			i64 = 1
+		}
+	case bsontype.Null:
+		if err := vr.ReadNull(); err != nil {
+			return err
+		}
+		val.Set(reflect.ValueOf(NewInt(0, false)))
+
+		return nil
+	default:
+		return fmt.Errorf("cannot decode %v into a null.Int", vrType)
+	}
+
+	val.Set(reflect.ValueOf(IntFrom(i64)))
+	return nil
+}
+
+// EncodeValue implements bsoncodec.ValueEncoder
+func (i Int) EncodeValue(ec bsoncodec.EncodeContext, vw bsonrw.ValueWriter, val reflect.Value) error {
+	if !val.IsValid() || val.Type() != tInt {
+		return bsoncodec.ValueEncoderError{Name: "NullIntEncodeValue", Types: []reflect.Type{tInt}, Received: val}
+	}
+	ii := val.Interface().(Int)
+	if !ii.Valid {
+		return vw.WriteNull()
+	}
+
+	return vw.WriteInt64(ii.Int64)
 }

@@ -9,6 +9,11 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"reflect"
+
+	"go.mongodb.org/mongo-driver/bson/bsoncodec"
+	"go.mongodb.org/mongo-driver/bson/bsonrw"
+	"go.mongodb.org/mongo-driver/bson/bsontype"
 )
 
 // nullBytes is a JSON null literal
@@ -115,4 +120,45 @@ func (s String) IsZero() bool {
 // Equal returns true if both strings have the same value or are both null.
 func (s String) Equal(other String) bool {
 	return s.Valid == other.Valid && (!s.Valid || s.String == other.String)
+}
+
+// DecodeValue implements bsoncodec.ValueDecoder
+func (s String) DecodeValue(dc bsoncodec.DecodeContext, vr bsonrw.ValueReader, val reflect.Value) error {
+	if !val.CanSet() || val.Type() != tString {
+		return bsoncodec.ValueDecoderError{Name: "NullStringDecodeValue", Types: []reflect.Type{tString}, Received: val}
+	}
+	switch vrType := vr.Type(); vrType {
+	case bsontype.String:
+		str, err := vr.ReadString()
+		if err != nil {
+			return err
+		}
+
+		s := NewString(str, true)
+		val.Set(reflect.ValueOf(s))
+
+		return nil
+	case bsontype.Null:
+		if err := vr.ReadNull(); err != nil {
+			return err
+		}
+		s := NewString("", false)
+		val.Set(reflect.ValueOf(s))
+
+		return nil
+	default:
+		return fmt.Errorf("cannot decode %v into a null.String", vrType)
+	}
+}
+
+// EncodeValue implements bsoncodec.ValueEncoder
+func (s String) EncodeValue(ec bsoncodec.EncodeContext, vw bsonrw.ValueWriter, val reflect.Value) error {
+	if !val.IsValid() || val.Type() != tString {
+		return bsoncodec.ValueEncoderError{Name: "NullStringEncodeValue", Types: []reflect.Type{tString}, Received: val}
+	}
+	str := val.Interface().(String)
+	if !str.Valid {
+		return vw.WriteNull()
+	}
+	return vw.WriteString(str.String)
 }

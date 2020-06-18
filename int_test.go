@@ -6,12 +6,19 @@ import (
 	"math"
 	"strconv"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/bsoncodec"
 )
 
 var (
-	intJSON       = []byte(`12345`)
-	intStringJSON = []byte(`"12345"`)
-	nullIntJSON   = []byte(`{"Int64":12345,"Valid":true}`)
+	intJSON        = []byte(`12345`)
+	intStringJSON  = []byte(`"12345"`)
+	nullIntJSON    = []byte(`{"Int64":12345,"Valid":true}`)
+	testIntBson, _ = bson.Marshal(bson.M{
+		"key": int64(1),
+	})
 )
 
 func TestIntFrom(t *testing.T) {
@@ -237,6 +244,68 @@ func TestIntEqual(t *testing.T) {
 	int1 = NewInt(10, true)
 	int2 = NewInt(20, true)
 	assertIntEqualIsFalse(t, int1, int2)
+}
+
+func TestIntNullEncodeValue(t *testing.T) {
+	rb := RegisterNullStruct(bsoncodec.NewRegistryBuilder())
+	bsoncodec.DefaultValueEncoders{}.RegisterDefaultEncoders(rb)
+	bsoncodec.DefaultValueDecoders{}.RegisterDefaultDecoders(rb)
+	bson.DefaultRegistry = rb.Build()
+	out, err := bson.Marshal(bson.M{
+		"key": IntFrom(2),
+	})
+	assert.NoError(t, err)
+	out2, err := bson.Marshal(bson.M{
+		"key": int64(2),
+	})
+	assert.NoError(t, err)
+	assert.Equal(t, out2, out)
+}
+
+func TestIntNullEncodeValue1(t *testing.T) {
+	rb := RegisterNullStruct(bsoncodec.NewRegistryBuilder())
+	bsoncodec.DefaultValueEncoders{}.RegisterDefaultEncoders(rb)
+	bsoncodec.DefaultValueDecoders{}.RegisterDefaultDecoders(rb)
+	bson.DefaultRegistry = rb.Build()
+	out, err := bson.Marshal(bson.M{
+		"key": NewInt(2, false),
+	})
+	assert.NoError(t, err)
+	out2, err := bson.Marshal(bson.M{
+		"key": nil,
+	})
+	assert.NoError(t, err)
+	assert.Equal(t, out2, out)
+}
+
+func TestIntNullDecodeValue(t *testing.T) {
+	rb := RegisterNullStruct(bsoncodec.NewRegistryBuilder())
+	bsoncodec.DefaultValueEncoders{}.RegisterDefaultEncoders(rb)
+	bsoncodec.DefaultValueDecoders{}.RegisterDefaultDecoders(rb)
+	bson.DefaultRegistry = rb.Build()
+	intBson := &struct {
+		Key Int `bson:"key"`
+	}{}
+	err := bson.Unmarshal(testIntBson, intBson)
+	if assert.NoError(t, err) {
+		if assert.True(t, intBson.Key.Valid) {
+			assert.Equal(t, int64(1), intBson.Key.Int64)
+		}
+	}
+}
+
+func TestIntNullDecodeValue2(t *testing.T) {
+	rb := RegisterNullStruct(bsoncodec.NewRegistryBuilder())
+	bsoncodec.DefaultValueEncoders{}.RegisterDefaultEncoders(rb)
+	bsoncodec.DefaultValueDecoders{}.RegisterDefaultDecoders(rb)
+	bson.DefaultRegistry = rb.Build()
+	intBson := &struct {
+		Key Int `bson:"key"`
+	}{}
+	err := bson.Unmarshal(nullBson, intBson)
+	if assert.NoError(t, err) {
+		assert.False(t, intBson.Key.Valid)
+	}
 }
 
 func assertInt(t *testing.T, i Int, from string) {

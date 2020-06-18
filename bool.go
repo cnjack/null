@@ -6,6 +6,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
+
+	"go.mongodb.org/mongo-driver/bson/bsoncodec"
+	"go.mongodb.org/mongo-driver/bson/bsonrw"
+	"go.mongodb.org/mongo-driver/bson/bsontype"
 )
 
 // Bool is a nullable bool.
@@ -127,4 +132,45 @@ func (b Bool) IsZero() bool {
 // Equal returns true if both booleans have the same value or are both null.
 func (b Bool) Equal(other Bool) bool {
 	return b.Valid == other.Valid && (!b.Valid || b.Bool == other.Bool)
+}
+
+// DecodeValue implements bsoncodec.ValueDecoder
+func (b Bool) DecodeValue(dc bsoncodec.DecodeContext, vr bsonrw.ValueReader, val reflect.Value) error {
+	if !val.CanSet() || val.Type() != tBoolean {
+		return bsoncodec.ValueDecoderError{Name: "NullBoolDecodeValue", Types: []reflect.Type{tBoolean}, Received: val}
+	}
+
+	switch vrType := vr.Type(); vrType {
+	case bsontype.Boolean:
+		b, err := vr.ReadBoolean()
+		if err != nil {
+			return err
+		}
+
+		val.Set(reflect.ValueOf(NewBool(b, true)))
+
+		return nil
+	case bsontype.Null:
+		if err := vr.ReadNull(); err != nil {
+			return err
+		}
+		s := NewBool(false, false)
+		val.Set(reflect.ValueOf(s))
+
+		return nil
+	default:
+		return fmt.Errorf("cannot decode %v into a null.Bool", vrType)
+	}
+}
+
+// EncodeValue implements bsoncodec.ValueEncoder
+func (b Bool) EncodeValue(ec bsoncodec.EncodeContext, vw bsonrw.ValueWriter, val reflect.Value) error {
+	if !val.IsValid() || val.Type() != tBoolean {
+		return bsoncodec.ValueEncoderError{Name: "NullBoolEncodeValue", Types: []reflect.Type{tBoolean}, Received: val}
+	}
+	bb := val.Interface().(Bool)
+	if !bb.Valid {
+		return vw.WriteNull()
+	}
+	return vw.WriteBoolean(bb.Bool)
 }

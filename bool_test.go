@@ -4,12 +4,19 @@ import (
 	"encoding/json"
 	"errors"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/bsoncodec"
 )
 
 var (
-	boolJSON     = []byte(`true`)
-	falseJSON    = []byte(`false`)
-	nullBoolJSON = []byte(`{"Bool":true,"Valid":true}`)
+	boolJSON        = []byte(`true`)
+	falseJSON       = []byte(`false`)
+	nullBoolJSON    = []byte(`{"Bool":true,"Valid":true}`)
+	testboolBson, _ = bson.Marshal(bson.M{
+		"key": true,
+	})
 )
 
 func TestBoolFrom(t *testing.T) {
@@ -215,6 +222,84 @@ func TestBoolEqual(t *testing.T) {
 	b1 = NewBool(true, true)
 	b2 = NewBool(false, true)
 	assertBoolEqualIsFalse(t, b1, b2)
+}
+
+func TestBooleanNullEncodeValue(t *testing.T) {
+	rb := RegisterNullStruct(bsoncodec.NewRegistryBuilder())
+	bsoncodec.DefaultValueEncoders{}.RegisterDefaultEncoders(rb)
+	bsoncodec.DefaultValueDecoders{}.RegisterDefaultDecoders(rb)
+	bson.DefaultRegistry = rb.Build()
+	out, err := bson.Marshal(bson.M{
+		"key": NewBool(true, true),
+	})
+	assert.NoError(t, err)
+	out2, err := bson.Marshal(bson.M{
+		"key": true,
+	})
+	assert.NoError(t, err)
+	assert.Equal(t, out2, out)
+}
+
+func TestBooleanNullEncodeValue1(t *testing.T) {
+	rb := RegisterNullStruct(bsoncodec.NewRegistryBuilder())
+	bsoncodec.DefaultValueEncoders{}.RegisterDefaultEncoders(rb)
+	bsoncodec.DefaultValueDecoders{}.RegisterDefaultDecoders(rb)
+	bson.DefaultRegistry = rb.Build()
+	out, err := bson.Marshal(bson.M{
+		"key": NewBool(false, false),
+	})
+	assert.NoError(t, err)
+	out2, err := bson.Marshal(bson.M{
+		"key": nil,
+	})
+	assert.NoError(t, err)
+	assert.Equal(t, out2, out)
+}
+
+func TestBooleanNullEncodeValue3(t *testing.T) {
+	rb := RegisterNullStruct(bsoncodec.NewRegistryBuilder())
+	bsoncodec.DefaultValueEncoders{}.RegisterDefaultEncoders(rb)
+	bsoncodec.DefaultValueDecoders{}.RegisterDefaultDecoders(rb)
+	bson.DefaultRegistry = rb.Build()
+	out, err := bson.Marshal(bson.M{
+		"key": NewBool(false, true),
+	})
+	assert.NoError(t, err)
+	out2, err := bson.Marshal(bson.M{
+		"key": false,
+	})
+	assert.NoError(t, err)
+	assert.Equal(t, out2, out)
+}
+
+func TestBoolNullDecodeValue(t *testing.T) {
+	rb := RegisterNullStruct(bsoncodec.NewRegistryBuilder())
+	bsoncodec.DefaultValueEncoders{}.RegisterDefaultEncoders(rb)
+	bsoncodec.DefaultValueDecoders{}.RegisterDefaultDecoders(rb)
+	bson.DefaultRegistry = rb.Build()
+	boolBson := &struct {
+		Key Bool `bson:"key"`
+	}{}
+	err := bson.Unmarshal(testboolBson, boolBson)
+	if assert.NoError(t, err) {
+		if assert.True(t, boolBson.Key.Valid) {
+			assert.True(t, boolBson.Key.Bool)
+		}
+	}
+}
+
+func TestBoolNullDecodeValue2(t *testing.T) {
+	rb := RegisterNullStruct(bsoncodec.NewRegistryBuilder())
+	bsoncodec.DefaultValueEncoders{}.RegisterDefaultEncoders(rb)
+	bsoncodec.DefaultValueDecoders{}.RegisterDefaultDecoders(rb)
+	bson.DefaultRegistry = rb.Build()
+	boolBson := &struct {
+		Key Bool `bson:"key"`
+	}{}
+	err := bson.Unmarshal(nullBson, boolBson)
+	if assert.NoError(t, err) {
+		assert.False(t, boolBson.Key.Valid)
+	}
 }
 
 func assertBool(t *testing.T, b Bool, from string) {

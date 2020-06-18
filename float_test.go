@@ -5,13 +5,20 @@ import (
 	"errors"
 	"math"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/bsoncodec"
 )
 
 var (
-	floatJSON       = []byte(`1.2345`)
-	floatStringJSON = []byte(`"1.2345"`)
-	floatBlankJSON  = []byte(`""`)
-	nullFloatJSON   = []byte(`{"Float64":1.2345,"Valid":true}`)
+	floatJSON        = []byte(`1.2345`)
+	floatStringJSON  = []byte(`"1.2345"`)
+	floatBlankJSON   = []byte(`""`)
+	nullFloatJSON    = []byte(`{"Float64":1.2345,"Valid":true}`)
+	testFloatBson, _ = bson.Marshal(bson.M{
+		"key": 1.23,
+	})
 )
 
 func TestFloatFrom(t *testing.T) {
@@ -230,6 +237,68 @@ func TestFloatEqual(t *testing.T) {
 	f1 = NewFloat(10, true)
 	f2 = NewFloat(20, true)
 	assertFloatEqualIsFalse(t, f1, f2)
+}
+
+func TestFloatNullEncodeValue(t *testing.T) {
+	rb := RegisterNullStruct(bsoncodec.NewRegistryBuilder())
+	bsoncodec.DefaultValueEncoders{}.RegisterDefaultEncoders(rb)
+	bsoncodec.DefaultValueDecoders{}.RegisterDefaultDecoders(rb)
+	bson.DefaultRegistry = rb.Build()
+	out, err := bson.Marshal(bson.M{
+		"key": NewFloat(1.32, true),
+	})
+	assert.NoError(t, err)
+	out2, err := bson.Marshal(bson.M{
+		"key": 1.32,
+	})
+	assert.NoError(t, err)
+	assert.Equal(t, out2, out)
+}
+
+func TestFloatNullEncodeValue1(t *testing.T) {
+	rb := RegisterNullStruct(bsoncodec.NewRegistryBuilder())
+	bsoncodec.DefaultValueEncoders{}.RegisterDefaultEncoders(rb)
+	bsoncodec.DefaultValueDecoders{}.RegisterDefaultDecoders(rb)
+	bson.DefaultRegistry = rb.Build()
+	out, err := bson.Marshal(bson.M{
+		"key": NewFloat(1.32, false),
+	})
+	assert.NoError(t, err)
+	out2, err := bson.Marshal(bson.M{
+		"key": nil,
+	})
+	assert.NoError(t, err)
+	assert.Equal(t, out2, out)
+}
+
+func TestFloatNullDecodeValue(t *testing.T) {
+	rb := RegisterNullStruct(bsoncodec.NewRegistryBuilder())
+	bsoncodec.DefaultValueEncoders{}.RegisterDefaultEncoders(rb)
+	bsoncodec.DefaultValueDecoders{}.RegisterDefaultDecoders(rb)
+	bson.DefaultRegistry = rb.Build()
+	floatBson := &struct {
+		Key Float `bson:"key"`
+	}{}
+	err := bson.Unmarshal(testFloatBson, floatBson)
+	if assert.NoError(t, err) {
+		if assert.True(t, floatBson.Key.Valid) {
+			assert.Equal(t, 1.23, floatBson.Key.Float64)
+		}
+	}
+}
+
+func TestFloatNullDecodeValue2(t *testing.T) {
+	rb := RegisterNullStruct(bsoncodec.NewRegistryBuilder())
+	bsoncodec.DefaultValueEncoders{}.RegisterDefaultEncoders(rb)
+	bsoncodec.DefaultValueDecoders{}.RegisterDefaultDecoders(rb)
+	bson.DefaultRegistry = rb.Build()
+	floatBson := &struct {
+		Key Float `bson:"key"`
+	}{}
+	err := bson.Unmarshal(nullBson, floatBson)
+	if assert.NoError(t, err) {
+		assert.False(t, floatBson.Key.Valid)
+	}
 }
 
 func assertFloat(t *testing.T, f Float, from string) {

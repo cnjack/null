@@ -4,6 +4,11 @@ import (
 	"encoding/json"
 	"errors"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/bsoncodec"
 )
 
 var (
@@ -11,8 +16,14 @@ var (
 	blankStringJSON = []byte(`""`)
 	nullStringJSON  = []byte(`{"String":"test","Valid":true}`)
 
-	nullJSON    = []byte(`null`)
-	invalidJSON = []byte(`:)`)
+	nullJSON          = []byte(`null`)
+	invalidJSON       = []byte(`:)`)
+	testStringBson, _ = bson.Marshal(bson.M{
+		"key": "test",
+	})
+	nullBson, _ = bson.Marshal(bson.M{
+		"key": nil,
+	})
 )
 
 type stringInStruct struct {
@@ -217,6 +228,84 @@ func TestStringEqual(t *testing.T) {
 	str1 = NewString("foo", true)
 	str2 = NewString("bar", true)
 	assertStringEqualIsFalse(t, str1, str2)
+}
+
+func TestStringEncodeValue(t *testing.T) {
+	rb := RegisterNullStruct(bsoncodec.NewRegistryBuilder())
+	bsoncodec.DefaultValueEncoders{}.RegisterDefaultEncoders(rb)
+	bsoncodec.DefaultValueDecoders{}.RegisterDefaultDecoders(rb)
+	bson.DefaultRegistry = rb.Build()
+	out, err := bson.Marshal(bson.M{
+		"key": NewString("test", true),
+	})
+	assert.NoError(t, err)
+	out2, err := bson.Marshal(bson.M{
+		"key": "test",
+	})
+	assert.NoError(t, err)
+	assert.Equal(t, out2, out)
+}
+
+func TestStringNullEncodeValue(t *testing.T) {
+	rb := RegisterNullStruct(bsoncodec.NewRegistryBuilder())
+	bsoncodec.DefaultValueEncoders{}.RegisterDefaultEncoders(rb)
+	bsoncodec.DefaultValueDecoders{}.RegisterDefaultDecoders(rb)
+	bson.DefaultRegistry = rb.Build()
+	out, err := bson.Marshal(bson.M{
+		"key": NewString("xxxx", false),
+	})
+	assert.NoError(t, err)
+	out2, err := bson.Marshal(bson.M{
+		"key": nil,
+	})
+	assert.NoError(t, err)
+	assert.Equal(t, out2, out)
+}
+
+func TestStringNullEncodeValue1(t *testing.T) {
+	rb := RegisterNullStruct(bsoncodec.NewRegistryBuilder())
+	bsoncodec.DefaultValueEncoders{}.RegisterDefaultEncoders(rb)
+	bsoncodec.DefaultValueDecoders{}.RegisterDefaultDecoders(rb)
+	bson.DefaultRegistry = rb.Build()
+	out, err := bson.Marshal(bson.M{
+		"key": NewString("some invalid string", false),
+	})
+	assert.NoError(t, err)
+	out2, err := bson.Marshal(bson.M{
+		"key": nil,
+	})
+	assert.NoError(t, err)
+	assert.Equal(t, out2, out)
+}
+
+func TestStringNullDecodeValue(t *testing.T) {
+	rb := RegisterNullStruct(bsoncodec.NewRegistryBuilder())
+	bsoncodec.DefaultValueEncoders{}.RegisterDefaultEncoders(rb)
+	bsoncodec.DefaultValueDecoders{}.RegisterDefaultDecoders(rb)
+	bson.DefaultRegistry = rb.Build()
+	strBson := &struct {
+		Key String `bson:"key"`
+	}{}
+	err := bson.Unmarshal(testStringBson, strBson)
+	if assert.NoError(t, err) {
+		if assert.True(t, strBson.Key.Valid) {
+			assert.Equal(t, "test", strBson.Key.String)
+		}
+	}
+}
+
+func TestStringNullDecodeValue2(t *testing.T) {
+	rb := RegisterNullStruct(bsoncodec.NewRegistryBuilder())
+	bsoncodec.DefaultValueEncoders{}.RegisterDefaultEncoders(rb)
+	bsoncodec.DefaultValueDecoders{}.RegisterDefaultDecoders(rb)
+	bson.DefaultRegistry = rb.Build()
+	strBson := &struct {
+		Key String `bson:"key"`
+	}{}
+	err := bson.Unmarshal(nullBson, strBson)
+	if assert.NoError(t, err) {
+		assert.False(t, strBson.Key.Valid)
+	}
 }
 
 func maybePanic(err error) {

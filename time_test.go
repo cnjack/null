@@ -5,20 +5,28 @@ import (
 	"errors"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/bsoncodec"
 )
 
 var (
-	timeString1   = "2012-12-21T21:21:21Z"
-	timeString2   = "2012-12-21T22:21:21+01:00" // Same time as timeString1 but in a different timezone
-	timeString3   = "2018-08-19T01:02:03Z"
-	timeJSON      = []byte(`"` + timeString1 + `"`)
-	nullTimeJSON  = []byte(`null`)
-	timeValue1, _ = time.Parse(time.RFC3339, timeString1)
-	timeValue2, _ = time.Parse(time.RFC3339, timeString2)
-	timeValue3, _ = time.Parse(time.RFC3339, timeString3)
-	timeObject    = []byte(`{"Time":"2012-12-21T21:21:21Z","Valid":true}`)
-	nullObject    = []byte(`{"Time":"0001-01-01T00:00:00Z","Valid":false}`)
-	badObject     = []byte(`{"hello": "world"}`)
+	timeString1     = "2012-12-21T21:21:21Z"
+	timeString2     = "2012-12-21T22:21:21+01:00" // Same time as timeString1 but in a different timezone
+	timeString3     = "2018-08-19T01:02:03Z"
+	timeJSON        = []byte(`"` + timeString1 + `"`)
+	nullTimeJSON    = []byte(`null`)
+	timeValue1, _   = time.Parse(time.RFC3339, timeString1)
+	timeValue2, _   = time.Parse(time.RFC3339, timeString2)
+	timeValue3, _   = time.Parse(time.RFC3339, timeString3)
+	timeObject      = []byte(`{"Time":"2012-12-21T21:21:21Z","Valid":true}`)
+	nullObject      = []byte(`{"Time":"0001-01-01T00:00:00Z","Valid":false}`)
+	badObject       = []byte(`{"hello": "world"}`)
+	testTime        = time.Now()
+	testTimeBson, _ = bson.Marshal(bson.M{
+		"key": testTime,
+	})
 )
 
 func TestUnmarshalTimeJSON(t *testing.T) {
@@ -254,6 +262,69 @@ func TestTimeExactEqual(t *testing.T) {
 	t1 = NewTime(timeValue1, true)
 	t2 = NewTime(timeValue3, true)
 	assertTimeExactEqualIsFalse(t, t1, t2)
+}
+
+func TestTimeNullEncodeValue(t *testing.T) {
+	rb := RegisterNullStruct(bsoncodec.NewRegistryBuilder())
+	bsoncodec.DefaultValueEncoders{}.RegisterDefaultEncoders(rb)
+	bsoncodec.DefaultValueDecoders{}.RegisterDefaultDecoders(rb)
+	bson.DefaultRegistry = rb.Build()
+	out, err := bson.Marshal(bson.M{
+		"key": TimeFrom(testTime),
+	})
+	assert.NoError(t, err)
+	out2, err := bson.Marshal(bson.M{
+		"key": testTime,
+	})
+	assert.NoError(t, err)
+	assert.Equal(t, out2, out)
+}
+
+func TestTimeNullEncodeValue1(t *testing.T) {
+	rb := RegisterNullStruct(bsoncodec.NewRegistryBuilder())
+	bsoncodec.DefaultValueEncoders{}.RegisterDefaultEncoders(rb)
+	bsoncodec.DefaultValueDecoders{}.RegisterDefaultDecoders(rb)
+	bson.DefaultRegistry = rb.Build()
+	Time := time.Now()
+	out, err := bson.Marshal(bson.M{
+		"key": NewTime(Time, false),
+	})
+	assert.NoError(t, err)
+	out2, err := bson.Marshal(bson.M{
+		"key": nil,
+	})
+	assert.NoError(t, err)
+	assert.Equal(t, out2, out)
+}
+
+func TestTimeNullDecodeValue(t *testing.T) {
+	rb := RegisterNullStruct(bsoncodec.NewRegistryBuilder())
+	bsoncodec.DefaultValueEncoders{}.RegisterDefaultEncoders(rb)
+	bsoncodec.DefaultValueDecoders{}.RegisterDefaultDecoders(rb)
+	bson.DefaultRegistry = rb.Build()
+	timeBson := &struct {
+		Key Time `bson:"key"`
+	}{}
+	err := bson.Unmarshal(testTimeBson, timeBson)
+	if assert.NoError(t, err) {
+		if assert.True(t, timeBson.Key.Valid) {
+			assert.Equal(t, testTime.Unix(), timeBson.Key.Time.Unix())
+		}
+	}
+}
+
+func TestTimeNullDecodeValue2(t *testing.T) {
+	rb := RegisterNullStruct(bsoncodec.NewRegistryBuilder())
+	bsoncodec.DefaultValueEncoders{}.RegisterDefaultEncoders(rb)
+	bsoncodec.DefaultValueDecoders{}.RegisterDefaultDecoders(rb)
+	bson.DefaultRegistry = rb.Build()
+	timeBson := &struct {
+		Key Time `bson:"key"`
+	}{}
+	err := bson.Unmarshal(nullBson, timeBson)
+	if assert.NoError(t, err) {
+		assert.False(t, timeBson.Key.Valid)
+	}
 }
 
 func assertTime(t *testing.T, ti Time, from string) {
