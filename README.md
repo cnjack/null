@@ -77,7 +77,18 @@ This package isn't intended to be a catch-all data-wrangling package. It is esse
 ### Package history
 *As of v4*, unmarshaling from JSON `sql.NullXXX` JSON objects (ex. `{"Int64": 123, "Valid": true}`) is no longer supported. It's unlikely many people used this, but if you need it, use v3.
 
-### bson
+### Support for bson
+usage: 
+```go
+package main
+
+func init() {
+	rb := null.RegisterNullStruct(bsoncodec.NewRegistryBuilder())
+	bsoncodec.DefaultValueEncoders{}.RegisterDefaultEncoders(rb)
+	bsoncodec.DefaultValueDecoders{}.RegisterDefaultDecoders(rb)
+	bson.DefaultRegistry = rb.Build()
+}
+```
 
 ### Bugs
 `json`'s `",omitempty"` struct tag does not work correctly right now. It will never omit a null or empty String. This might be [fixed eventually](https://github.com/golang/go/issues/11939).
